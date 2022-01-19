@@ -7,6 +7,9 @@ from types import ModuleType
 import typing as T
 import os
 
+# This should match the version in setup.py
+__version__ = "0.3.1"
+
 # -------------------------------------------------------------------------------------------------
 # Logging configuration
 # -------------------------------------------------------------------------------------------------

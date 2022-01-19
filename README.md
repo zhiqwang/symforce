@@ -56,16 +56,32 @@ Things to try:
 
 In the future we will share a survey with specific questions, but more generally we are interested in all feedback you can provide about the value of the library, comparisons to alternatives, and any guidance to us.
 
-# Build from source
+# Build from pip
 
-<span style="color:blue">TODO: Create wheels for <code style="color:blue"><b>pip install symforce</b></code></span>
+SymForce requires Python 3.8 or later. We suggest creating a virtual python environment.
 
-SymForce requires Python 3.8 or later. We suggest using conda or virtualenv:
-
+Install the `gmp` package with one of:
 ```
-conda create --name symforce "python>=3.8"
-conda activate symforce
+apt install libgmp-dev            # Linux
+brew install gmp                  # Mac
+conda install -c conda-forge gmp  # Conda
 ```
+
+Install SymForce
+```
+pip install -r requirements.txt
+pip install -e .
+```
+
+Verify the installation in Python:
+```python
+>>> from symforce import geo
+>>> geo.Rot3()
+```
+
+# Build CMake yourself (TODO deconflict)
+
+SymForce requires Python 3.8 or later. We suggest creating a virtual python environment.
 
 Install packages:
 ```

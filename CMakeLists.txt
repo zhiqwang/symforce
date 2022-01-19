@@ -462,7 +462,11 @@ if(SYMFORCE_GENERATE_MANIFEST)
   function(generate_manifest)
     get_target_property(eigen_include_dirs Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES)
     get_target_property(spdlog_include_dirs spdlog::spdlog INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(catch2_include_dirs symforce_catch2 INTERFACE_INCLUDE_DIRECTORIES)
+
+    if (SYMFORCE_BUILD_TESTS)
+      get_target_property(catch2_include_dirs symforce_catch2 INTERFACE_INCLUDE_DIRECTORIES)
+    endif()
+
     execute_process(
       COMMAND ${SYMFORCE_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_manifest.py
                                 --eigen_include_dirs "${eigen_include_dirs}"
