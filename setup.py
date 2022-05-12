@@ -14,6 +14,7 @@ from setuptools import Extension
 from setuptools import find_packages
 from setuptools import setup
 from setuptools.command.build_ext import build_ext
+from setuptools.command.egg_info import egg_info
 from setuptools.command.install import install
 
 SOURCE_DIR = Path(__file__).resolve().parent
@@ -48,6 +49,7 @@ class CMakeBuild(build_ext):
 
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={build_directory}",
+            "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-rpath,'$ORIGIN/../..',-z,origin",
             f"-DPYTHON_EXECUTABLE={sys.executable}",
         ]
 
@@ -89,11 +91,39 @@ class CMakeBuild(build_ext):
 
     def move_output(self, ext: CMakeExtension) -> None:
         build_temp = Path(self.build_temp).resolve()
+        extension_source_paths = {"cc_sym": build_temp / "pybind" / self.get_ext_filename("cc_sym")}
+
+        build_temp = Path(self.build_temp).resolve()
         dest_path = Path(self.get_ext_fullpath(ext.name)).resolve()  # type: ignore[attr-defined]
-        source_path = build_temp / "pybind" / self.get_ext_filename(ext.name)  # type: ignore[attr-defined]
         dest_directory = dest_path.parents[0]
         dest_directory.mkdir(parents=True, exist_ok=True)
-        self.copy_file(source_path, dest_path)
+        self.copy_file(extension_source_paths[ext.name], dest_path)
+
+
+class MyEggInfo(egg_info):
+    def run(self) -> None:
+        with open("/tmp/pip-log", "a") as f:
+            print(self.distribution.install_requires, file=f)
+            print(self.distribution.extras_require, file=f)
+
+        def filter_local(s):
+            if "@" in s:
+                s = s.split("@")[0]
+            return s
+
+        self.distribution.install_requires = [
+            filter_local(requirement) for requirement in self.distribution.install_requires
+        ]
+        self.distribution.extras_require = {
+            k: [filter_local(requirement) for requirement in v]
+            for k, v in self.distribution.extras_require.items()
+        }
+
+        with open("/tmp/pip-log", "a") as f:
+            print(self.distribution.install_requires, file=f)
+            print(self.distribution.extras_require, file=f)
+
+        super().run()
 
 
 class InstallWithExtras(install):
@@ -108,21 +138,38 @@ class InstallWithExtras(install):
     def run(self) -> None:
         super().run()
 
+        build_ext_obj = self.distribution.get_command_obj("build_ext")
         build_dir = Path(self.distribution.get_command_obj("build_ext").build_temp)  # type: ignore[attr-defined]
 
         # Install symengine
         # TODO(aaron): This is pretty jank, but it works in the nominal case
-        subprocess.run(
-            [
-                sys.executable,
-                str(SOURCE_DIR / "third_party" / "symenginepy" / "setup.py"),
-                "install",
-                f"--prefix={self.prefix}",
-            ],
-            # TODO(aaron): This seems pretty brittle, but the only way I could get symenginepy to
-            # install was to run this from the same directory we do during the build
-            cwd=build_dir / "symenginepy-prefix" / "src" / "symenginepy-build",
-            check=True,
+        # subprocess.run(
+        #     [
+        #         sys.executable,
+        #         str(SOURCE_DIR / "third_party" / "symenginepy" / "setup.py"),
+        #         "install",
+        #         f"--prefix={self.prefix}",
+        #     ],
+        #     # TODO(aaron): This seems pretty brittle, but the only way I could get symenginepy to
+        #     # install was to run this from the same directory we do during the build
+        #     cwd=build_dir / "symenginepy-prefix" / "src" / "symenginepy-build",
+        #     check=True,
+        # )
+
+        self.copy_file(
+            build_dir
+            / "symengine_install"
+            / "lib"
+            / f"python{sys.version_info.major}.{sys.version_info.minor}"
+            / "site-packages"
+            / "symengine"
+            / "lib"
+            / build_ext_obj.get_ext_filename("symengine_wrapper"),
+            Path.cwd()
+            / self.install_platlib
+            / "symengine"
+            / "lib"
+            / build_ext_obj.get_ext_filename("symengine_wrapper"),
         )
 
         # Configure with install prefix
@@ -134,32 +181,30 @@ class InstallWithExtras(install):
 
         # Install other libraries needed for cc_sym.so
         subprocess.run(
-            [
-                "cmake",
-                "--build",
-                ".",
-                "--target",
-                "install",
-            ],
+            ["cmake", "--build", ".", "--target", "install"],
             cwd=build_dir,
             check=True,
         )
 
         # Install lcmtypes - this might be super jank
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "lcmtypes/python2.7",
-                f"--prefix={self.prefix}",
-            ],
-            # TODO(aaron): This seems pretty brittle, but the only way I could get symenginepy to
-            # install was to run this from the same directory we do during the build
-            cwd=build_dir,
-            check=True,
+        self.copy_tree(
+            build_dir / "lcmtypes" / "python2.7" / "lcmtypes",
+            str(Path.cwd() / self.install_platlib / "lcmtypes"),
         )
+        # subprocess.run(
+        #     [
+        #         sys.executable,
+        #         "-m",
+        #         "pip",
+        #         "install",
+        #         "lcmtypes/python2.7",
+        #         f"--prefix={self.prefix}",
+        #     ],
+        #     # TODO(aaron): This seems pretty brittle, but the only way I could get symenginepy to
+        #     # install was to run this from the same directory we do during the build
+        #     cwd=build_dir,
+        #     check=True,
+        # )
 
 
 def symforce_version() -> str:
@@ -196,7 +241,9 @@ docs_requirements = [
     "breathe",
 ]
 
-cmdclass: T.Dict[str, T.Any] = dict(build_ext=CMakeBuild, install=InstallWithExtras)
+cmdclass: T.Dict[str, T.Any] = dict(
+    build_ext=CMakeBuild, install=InstallWithExtras, egg_info=MyEggInfo
+)
 
 setup(
     name="symforce",
@@ -227,7 +274,7 @@ setup(
         "Topic :: Education :: Computer Aided Instruction (CAI)",
         "Programming Language :: Python :: 3",
         "Programming Language :: C++",
-        "License :: OSI Approved :: Apache-2.0 License",
+        "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
     ],
     # -------------------------------------------------------------------------
@@ -236,7 +283,11 @@ setup(
     # Minimum Python version
     python_requires=">=3.8",
     # Find all packages in the directory
-    packages=find_packages(),
+    packages=find_packages() + find_packages(where="third_party/symenginepy"),
+    package_dir={
+        "symforce": "symforce",
+        "symengine": "third_party/symenginepy/symengine",
+    },
     # Override the extension builder with our cmake class
     cmdclass=cmdclass,
     # Build C++ extension module

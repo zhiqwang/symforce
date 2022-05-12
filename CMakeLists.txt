@@ -3,9 +3,8 @@
 # This source code is under the Apache 2.0 license found in the LICENSE file.
 # ----------------------------------------------------------------------------
 
-# NOTE(aaron): This is the minimum version for FetchContent, not sure if we need newer; certainly no
-# newer than 3.15 required
-cmake_minimum_required(VERSION 3.11)
+# NOTE(aaron): This is the minimum version for execute_process COMMAND_ERROR_IS_FATAL
+cmake_minimum_required(VERSION 3.19)
 
 project(symforce)
 
@@ -65,7 +64,7 @@ option(SYMFORCE_BUILD_STATIC_LIBRARIES
 )
 
 find_program(SYMFORCE_DEFAULT_PYTHON python3 NO_CACHE)
-set(SYMFORCE_PYTHON "${SYMFORCE_DEFAULT_PYTHON}" CACHE STRING "Python executable to use")
+set(SYMFORCE_PYTHON "${SYMFORCE_DEFAULT_PYTHON}" CACHE STRING "Python executable to use" FORCE)
 
 
 set(SYMFORCE_SYMENGINE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/symengine_install CACHE STRING
@@ -186,6 +185,7 @@ else()
     COMMAND ${SYMFORCE_PYTHON} -c "from _version import version; print(version, end='')"
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/symforce
     OUTPUT_VARIABLE SYMFORCE_VERSION
+    COMMAND_ERROR_IS_FATAL ANY
   )
   file(WRITE
     ${CMAKE_CURRENT_BINARY_DIR}/lcmtypes/python2.7/setup.py
@@ -284,6 +284,7 @@ if(SYMFORCE_GENERATE_MANIFEST)
                                 --binary_output_dir "${CMAKE_BINARY_DIR}"
                                 # TODO(aaron): Put this somewhere smarter
                                 --manifest_path ${CMAKE_CURRENT_SOURCE_DIR}/build/manifest.json
+      COMMAND_ERROR_IS_FATAL ANY
     )
   endfunction()
 
